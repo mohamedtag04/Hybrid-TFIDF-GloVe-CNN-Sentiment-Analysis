@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 import torch.optim as optim
-from torch import nn
+import torch.nn as nn
 
 def train_model(model, train_loader, val_loader, epochs=3, lr=2e-5):
     optimizer = optim.AdamW(model.parameters(), lr=lr)

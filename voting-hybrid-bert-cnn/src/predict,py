@@ -1,0 +1,106 @@
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+def generate_variations(text, num_variations=5):
+    tokenizer = AutoTokenizer.from_pretrained("humarin/chatgpt_paraphraser_on_T5_base")
+    model = AutoModelForSeq2SeqLM.from_pretrained("humarin/chatgpt_paraphraser_on_T5_base").to(device)
+    
+    input_ids = tokenizer(
+        f'paraphrase: {text}',
+        return_tensors="pt",
+        padding="longest",
+        max_length=128,
+        truncation=True,
+    ).input_ids.to(device)
+    
+    outputs = model.generate(
+        input_ids,
+        temperature=0.9, 
+        repetition_penalty=10.0,  
+        num_return_sequences=num_variations * 2,  
+        no_repeat_ngram_size=2,
+        num_beams=num_variations * 3,
+        num_beam_groups=num_variations,
+        max_length=256,
+        diversity_penalty=3.0
+    )
+    
+    raw_variations = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    variations = []
+    if raw_variations:
+        variations.append(raw_variations[0])
+        reference_words = set(raw_variations[0].lower().split())
+        
+        for var in raw_variations[1:]:
+            var_words = set(var.lower().split())
+            overlap = len(reference_words.intersection(var_words)) / max(len(reference_words), len(var_words))
+            if overlap < 0.6 and var not in variations and var != text: 
+                variations.append(var)
+                reference_words = set(var.lower().split()) 
+            if len(variations) >= num_variations:
+                break
+    
+    while len(variations) < num_variations:
+        variations.append(text)
+    
+    print("Filtered Variations (After Diversity Check):")
+    for i, var in enumerate(variations[:num_variations]):
+        print(f"Filtered Variation {i+1}: {var}")
+    
+    return variations[:num_variations]
+
+def predict_sentiment_with_voting(model, tokenizer, tfidf_vectorizer, glove_model, text, max_len=128, num_variations=5):
+    model.eval()     
+    variations = generate_variations(text, num_variations)
+    if len(variations) < num_variations:
+        print(f"Note: Only {len(variations)} unique variations generated instead of {num_variations}.")
+    variations.append(text) 
+    predictions = []
+    all_probabilities = []
+    
+    for var_text in variations:
+        var_text = str(var_text)
+        encoding = tokenizer.encode_plus(
+            var_text,
+            add_special_tokens=True,
+            max_length=max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt'
+        )
+
+        input_ids = encoding['input_ids'].flatten().to(device)
+        attention_mask = encoding['attention_mask'].flatten().to(device)
+        tfidf_scores = tfidf_vectorizer.transform([var_text]).toarray()[0]
+        words = var_text.lower().split()
+        tfidf_dict = {word: score for word, score in zip(tfidf_vectorizer.get_feature_names_out(), tfidf_scores) if score > 0}
+        glove_embeds = np.zeros((max_len, 300))  
+        tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        for i, token in enumerate(tokens):
+            if i >= max_len:
+                break
+            word = token if not token.startswith('##') and token not in ['[CLS]', '[SEP]', '[PAD]'] else ''
+            if word and word in glove_model:
+                emb = glove_model[word]
+                weight = tfidf_dict.get(word, 1.0)
+                glove_embeds[i] = emb * weight
+
+        glove_embeds = torch.tensor(glove_embeds, dtype=torch.float).to(device)
+
+        with torch.no_grad():
+            outputs = model(input_ids.unsqueeze(0), attention_mask.unsqueeze(0), glove_embeds.unsqueeze(0))
+            preds = torch.argmax(outputs, dim=1).item()
+            probs = outputs.softmax(dim=1).cpu().numpy()[0]
+        
+        predictions.append(preds)
+        all_probabilities.append(probs)
+    
+    positive_count = sum(1 for pred in predictions if pred == 1)
+    total_votes = len(predictions)
+    final_pred = 1 if positive_count > (total_votes / 2) else 0 
+    final_label = "Positive" if final_pred == 1 else "Negative"
+    avg_probabilities = np.mean(all_probabilities, axis=0)
+    
+    return final_label, avg_probabilities, variations, predictions

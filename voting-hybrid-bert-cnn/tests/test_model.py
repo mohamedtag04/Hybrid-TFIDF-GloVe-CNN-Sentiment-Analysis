@@ -1,7 +1,7 @@
 import unittest
 import torch
 from transformers import BertModel
-from src.model import HybridBertCNN
+from src.hybrid_bert_cnn import HybridBertCNN
 
 class TestModel(unittest.TestCase):
     def test_hybrid_bert_cnn_forward(self):

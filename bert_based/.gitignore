@@ -1,0 +1,23 @@
+# Weights and model files
+weights/
+*.pth
+*.pkl
+
+# GloVe embeddings
+data/glove/
+*.txt
+
+# Virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# Miscellaneous
+*.log
+*.tmp

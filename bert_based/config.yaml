@@ -1,0 +1,7 @@
+weights:
+  model: weights/hybrid_bert_cnn.pth
+  tfidf: weights/tfidf_vectorizer.pkl
+data:
+  glove: data/glove/glove.6B.300d.txt
+model:
+  max_len: 128

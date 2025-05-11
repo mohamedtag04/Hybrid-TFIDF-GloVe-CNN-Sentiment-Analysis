@@ -18,8 +18,8 @@ setup(
         "pyyaml>=6.0.0",
         "pydantic>=2.0.0"
     ],
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="NLP team",
+    author_email="s-mohamed.eldin@zewailcity.edu.eg",
     description="A hybrid BERT-CNN model for sentiment analysis",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
